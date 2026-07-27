@@ -272,26 +272,49 @@ def telegram_caption(data: dict) -> str:
     release_url = str(data.get("release_url", "")).strip()
 
     display_title = f"{artist} – {title}" if artist else title
+
     if release_url:
-        headline = f'<b><a href="{html.escape(release_url, quote=True)}">{html.escape(display_title)}</a></b>'
+        headline = (
+            f'<b><a href="{html.escape(release_url, quote=True)}">'
+            f'{html.escape(display_title)}</a></b>'
+        )
     else:
         headline = f"<b>{html.escape(display_title)}</b>"
 
-    lines = [headline]
-    if year:
-        lines.append(html.escape(year))
-    lines.extend(["", "Listen / Buy 👇"])
+    lines = [
+        headline,
+        "",
+        "🔗 <b>Available on</b>",
+        "",
+    ]
 
     seen = set()
+
     for item in data.get("links", []):
         name = str(item.get("name", "")).strip()
         url = str(item.get("url", "")).strip()
+
         if not name or not url or name.lower() in seen:
             continue
+
         seen.add(name.lower())
+
         lines.append(
-            f'<a href="{html.escape(url, quote=True)}">{html.escape(name)}</a>'
+            f'<a href="{html.escape(url, quote=True)}">'
+            f'{html.escape(name)}</a>'
         )
+
+    copyright_text = (
+        f"© {html.escape(year)} Lighthouse Records"
+        if year
+        else "© Lighthouse Records"
+    )
+
+    lines.extend([
+        "",
+        f"<i>{copyright_text}</i>",
+    ])
+
     return "\n".join(lines)
 
 
