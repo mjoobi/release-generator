@@ -1,4 +1,6 @@
+import base64
 import html
+import io
 import ipaddress
 import json
 import os
@@ -9,14 +11,26 @@ from urllib.parse import urljoin, urlparse
 import requests
 from bs4 import BeautifulSoup
 from flask import Flask, jsonify, render_template, request
+from PIL import Image, ImageOps, UnidentifiedImageError
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
 
 HTTP_TIMEOUT = 18
 MAX_PAGE_BYTES = 3_000_000
-MAX_IMAGE_BYTES = 10_000_000
+MAX_SOURCE_IMAGE_BYTES = 8_000_000
+TARGET_IMAGE_BYTES = 1_200_000
+TARGET_IMAGE_DIMENSION = 1280
+
+DEFAULT_CAPTION_TEMPLATE = """{title}
+
+🔗 Available on
+
+{links}
+
+© {year} Lighthouse Records"""
 
 PLATFORM_NAMES = {
     "spotify": "Spotify",
@@ -63,10 +77,11 @@ def is_public_http_url(value: str) -> bool:
             return False
 
         host = parsed.hostname.lower()
-        if host in {"localhost"} or host.endswith(".local"):
+        if host == "localhost" or host.endswith(".local"):
             return False
 
-        for info in socket.getaddrinfo(host, parsed.port or 443, type=socket.SOCK_STREAM):
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        for info in socket.getaddrinfo(host, port, type=socket.SOCK_STREAM):
             ip = ipaddress.ip_address(info[4][0])
             if (
                 ip.is_private
@@ -82,7 +97,7 @@ def is_public_http_url(value: str) -> bool:
         return False
 
 
-def fetch_page(url: str):
+def fetch_limited(url: str, max_bytes: int, expected: str = ""):
     if not is_public_http_url(url):
         raise ValueError("Please enter a valid public http(s) link.")
 
@@ -93,19 +108,25 @@ def fetch_page(url: str):
         raise ValueError("The link redirected to an unsupported address.")
 
     content_type = response.headers.get("content-type", "").lower()
-    if "text/html" not in content_type and "application/xhtml" not in content_type:
-        raise ValueError("This link did not return a web page.")
+    if expected and expected not in content_type:
+        raise ValueError(f"The link did not return {expected} content.")
 
     chunks = []
     total = 0
     for chunk in response.iter_content(64 * 1024):
         total += len(chunk)
-        if total > MAX_PAGE_BYTES:
-            raise ValueError("The page is too large to process.")
+        if total > max_bytes:
+            raise ValueError("The downloaded file is too large.")
         chunks.append(chunk)
 
-    encoding = response.encoding or "utf-8"
-    return b"".join(chunks).decode(encoding, errors="replace"), response.url
+    return b"".join(chunks), response.url, content_type
+
+
+def fetch_page(url: str):
+    raw, final_url, content_type = fetch_limited(url, MAX_PAGE_BYTES)
+    if "text/html" not in content_type and "application/xhtml" not in content_type:
+        raise ValueError("This link did not return a web page.")
+    return raw.decode("utf-8", errors="replace"), final_url
 
 
 def first_meta(soup: BeautifulSoup, *selectors: str) -> str:
@@ -190,10 +211,9 @@ def parse_release(page_html: str, source_url: str):
     year = ""
     combined_text = f"{title_line} {description} {soup.get_text(' ', strip=True)[:12000]}"
     years = re.findall(r"\b(19\d{2}|20\d{2})\b", combined_text)
-    if years:
-        plausible = [y for y in years if 1950 <= int(y) <= 2100]
-        if plausible:
-            year = plausible[0]
+    plausible = [y for y in years if 1950 <= int(y) <= 2100]
+    if plausible:
+        year = plausible[0]
 
     links = {}
     for anchor in soup.find_all("a", href=True):
@@ -204,7 +224,6 @@ def parse_release(page_html: str, source_url: str):
             source_url,
         )
 
-    # Many smart-link pages place destinations inside JSON/script data.
     script_text = "\n".join(
         script.get_text(" ", strip=False) for script in soup.find_all("script")
     )
@@ -213,7 +232,6 @@ def parse_release(page_html: str, source_url: str):
         decoded = decoded.rstrip("\\,;)}]")
         add_link(links, decoded, "", source_url)
 
-    # JSON-LD sometimes has cleaner metadata.
     for node in soup.select('script[type="application/ld+json"]'):
         try:
             data = json.loads(node.string or "")
@@ -238,7 +256,6 @@ def parse_release(page_html: str, source_url: str):
         except Exception:
             pass
 
-    # Stable, familiar ordering.
     preferred = [
         "Spotify", "Beatport", "Apple Music", "SoundCloud", "Deezer",
         "Amazon Music", "YouTube", "TIDAL", "Traxsource", "Bandcamp",
@@ -262,60 +279,131 @@ def parse_release(page_html: str, source_url: str):
         "cover_url": image,
         "release_url": source_url,
         "links": ordered_links,
+        "caption_template": DEFAULT_CAPTION_TEMPLATE,
     }
 
 
-def telegram_caption(data: dict) -> str:
+def title_html(data: dict) -> str:
     artist = str(data.get("artist", "")).strip()
     title = str(data.get("title", "")).strip() or "New Release"
-    year = str(data.get("year", "")).strip()
     release_url = str(data.get("release_url", "")).strip()
-
     display_title = f"{artist} – {title}" if artist else title
 
-    if release_url:
-        headline = (
+    escaped_title = html.escape(display_title)
+    if release_url and is_public_http_url(release_url):
+        return (
             f'<b><a href="{html.escape(release_url, quote=True)}">'
-            f'{html.escape(display_title)}</a></b>'
+            f"{escaped_title}</a></b>"
         )
-    else:
-        headline = f"<b>{html.escape(display_title)}</b>"
+    return f"<b>{escaped_title}</b>"
 
-    lines = [
-        headline,
-        "",
-        "🔗 <b>Available on</b>",
-        "",
-    ]
 
+def links_html(data: dict) -> str:
+    lines = []
     seen = set()
-
     for item in data.get("links", []):
         name = str(item.get("name", "")).strip()
         url = str(item.get("url", "")).strip()
-
-        if not name or not url or name.lower() in seen:
+        key = name.casefold()
+        if not name or not url or key in seen or not is_public_http_url(url):
             continue
-
-        seen.add(name.lower())
-
+        seen.add(key)
         lines.append(
-            f'<a href="{html.escape(url, quote=True)}">'
-            f'{html.escape(name)}</a>'
+            f'<a href="{html.escape(url, quote=True)}">{html.escape(name)}</a>'
         )
-
-    copyright_text = (
-        f"© {html.escape(year)} Lighthouse Records"
-        if year
-        else "© Lighthouse Records"
-    )
-
-    lines.extend([
-        "",
-        f"<i>{copyright_text}</i>",
-    ])
-
     return "\n".join(lines)
+
+
+def telegram_caption(data: dict) -> str:
+    template = str(data.get("caption_template", "")).strip() or DEFAULT_CAPTION_TEMPLATE
+    values = {
+        "{title}": title_html(data),
+        "{links}": links_html(data),
+        "{artist}": html.escape(str(data.get("artist", "")).strip()),
+        "{release}": html.escape(str(data.get("title", "")).strip()),
+        "{year}": html.escape(str(data.get("year", "")).strip()),
+    }
+
+    token_pattern = re.compile(r"(\{title\}|\{links\}|\{artist\}|\{release\}|\{year\})")
+    parts = token_pattern.split(template)
+    rendered = "".join(values.get(part, html.escape(part)) for part in parts)
+    rendered = re.sub(r"\n{3,}", "\n\n", rendered).strip()
+    return rendered
+
+
+def decode_data_url(value: str) -> bytes:
+    match = re.fullmatch(r"data:image/[a-zA-Z0-9.+-]+;base64,(.+)", value, flags=re.S)
+    if not match:
+        raise ValueError("The uploaded cover image is invalid.")
+    try:
+        raw = base64.b64decode(match.group(1), validate=True)
+    except Exception as exc:
+        raise ValueError("The uploaded cover image could not be decoded.") from exc
+    if len(raw) > MAX_SOURCE_IMAGE_BYTES:
+        raise ValueError("The uploaded cover is too large. Choose an image under 8 MB.")
+    return raw
+
+
+def compress_cover(source_bytes: bytes) -> bytes:
+    try:
+        with Image.open(io.BytesIO(source_bytes)) as opened:
+            image = ImageOps.exif_transpose(opened)
+            image.thumbnail(
+                (TARGET_IMAGE_DIMENSION, TARGET_IMAGE_DIMENSION),
+                Image.Resampling.LANCZOS,
+            )
+
+            if image.mode in {"RGBA", "LA"} or (
+                image.mode == "P" and "transparency" in image.info
+            ):
+                rgba = image.convert("RGBA")
+                background = Image.new("RGB", rgba.size, "white")
+                background.paste(rgba, mask=rgba.getchannel("A"))
+                image = background
+            else:
+                image = image.convert("RGB")
+
+            best = None
+            working = image
+            for dimension in (1280, 1120, 960, 800):
+                if max(working.size) > dimension:
+                    resized = working.copy()
+                    resized.thumbnail((dimension, dimension), Image.Resampling.LANCZOS)
+                else:
+                    resized = working
+
+                for quality in (88, 84, 80, 76, 72, 68):
+                    buffer = io.BytesIO()
+                    resized.save(
+                        buffer,
+                        format="JPEG",
+                        quality=quality,
+                        optimize=True,
+                        progressive=True,
+                    )
+                    candidate = buffer.getvalue()
+                    best = candidate
+                    if len(candidate) <= TARGET_IMAGE_BYTES:
+                        return candidate
+            if best:
+                return best
+    except (UnidentifiedImageError, OSError) as exc:
+        raise ValueError("The selected file is not a valid image.") from exc
+    raise ValueError("The cover image could not be processed.")
+
+
+def obtain_cover(data: dict):
+    uploaded = str(data.get("cover_data_url", "")).strip()
+    if uploaded:
+        return compress_cover(decode_data_url(uploaded))
+
+    cover_url = str(data.get("cover_url", "")).strip()
+    if not cover_url:
+        return None
+    raw, _, content_type = fetch_limited(cover_url, MAX_SOURCE_IMAGE_BYTES)
+    if not content_type.startswith("image/"):
+        raise ValueError("The cover URL did not return an image.")
+    return compress_cover(raw)
 
 
 def require_access():
@@ -326,9 +414,17 @@ def require_access():
     return None
 
 
+@app.errorhandler(413)
+def request_too_large(_error):
+    return jsonify({
+        "ok": False,
+        "error": "The upload is too large. Choose a cover image under 8 MB.",
+    }), 413
+
+
 @app.get("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", default_template=DEFAULT_CAPTION_TEMPLATE)
 
 
 @app.get("/health")
@@ -361,7 +457,7 @@ def generate():
         app.logger.exception("Unexpected generation error")
         return jsonify({
             "ok": False,
-            "error": "The page could not be parsed. You can still fill the fields manually.",
+            "error": "The page could not be parsed. Use Manual mode and enter the details yourself.",
         }), 500
 
 
@@ -381,19 +477,12 @@ def publish():
 
     data = request.get_json(silent=True) or {}
     caption = telegram_caption(data)
-    cover_url = str(data.get("cover_url", "")).strip()
 
     try:
+        cover_bytes = obtain_cover(data)
         base = f"https://api.telegram.org/bot{token}"
-        if cover_url and is_public_http_url(cover_url):
-            image_response = session.get(
-                cover_url, timeout=HTTP_TIMEOUT, allow_redirects=True, stream=True
-            )
-            image_response.raise_for_status()
-            image_bytes = image_response.content
-            if len(image_bytes) > MAX_IMAGE_BYTES:
-                raise ValueError("The cover image is too large.")
 
+        if cover_bytes:
             result = requests.post(
                 f"{base}/sendPhoto",
                 data={
@@ -401,13 +490,7 @@ def publish():
                     "caption": caption,
                     "parse_mode": "HTML",
                 },
-                files={
-                    "photo": (
-                        "cover.jpg",
-                        image_bytes,
-                        image_response.headers.get("content-type", "image/jpeg"),
-                    )
-                },
+                files={"photo": ("cover.jpg", cover_bytes, "image/jpeg")},
                 timeout=HTTP_TIMEOUT,
             )
         else:
@@ -427,7 +510,11 @@ def publish():
             description = response_data.get("description", "Telegram rejected the message.")
             return jsonify({"ok": False, "error": description}), 400
 
-        return jsonify({"ok": True, "message": "Published to Telegram."})
+        return jsonify({
+            "ok": True,
+            "message": "Published to Telegram.",
+            "cover_processed": bool(cover_bytes),
+        })
     except (requests.RequestException, ValueError) as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
     except Exception:

@@ -1,59 +1,43 @@
 # MJoobi Telegram Release Publisher
 
-A small Flask web app that:
+This Flask app can generate a Telegram release post from a Proton/smart-link page, but it also works completely manually when the smart link is unavailable.
 
-1. reads a Proton smart-link page,
-2. extracts the release title, artist, cover, year, and store links,
-3. lets you correct anything manually,
-4. publishes the cover and an HTML-formatted caption to a Telegram channel.
+## Version 2 features
+
+- Manual mode: no Proton link is required.
+- Add, remove, edit, and reorder streaming links.
+- Upload a custom JPG, PNG, or WebP cover.
+- Remote or uploaded covers are resized to a maximum of 1280 px and compressed to a Telegram-friendly JPEG, normally under about 1.2 MB.
+- Fully editable caption layout using placeholders:
+  - `{title}` — bold clickable artist/title
+  - `{links}` — clickable platform list in the chosen order
+  - `{artist}`
+  - `{release}`
+  - `{year}`
+- The uploaded image is processed in memory and is not stored permanently on Render.
 
 ## Telegram preparation
 
-1. In Telegram, open **@BotFather**.
+1. Open **@BotFather** in Telegram.
 2. Send `/newbot` and follow the instructions.
 3. Copy the bot token.
-4. Add the bot to your Telegram channel as an **administrator** with permission to post messages.
-5. Your channel ID can usually be the public username in this format:
+4. Add the bot to your Telegram channel as an administrator with permission to post messages.
+5. A public channel ID can usually be entered as `@yourchannelusername`.
 
-   `@yourchannelusername`
-
-   For a private channel, you need its numeric ID, usually beginning with `-100`.
-
-Never put the bot token directly inside the GitHub files.
+Never put the bot token directly inside GitHub files.
 
 ## Deploy on Render
 
 This repository includes `render.yaml`.
 
-1. Upload all project files to your GitHub repository.
-2. In Render, choose **New + → Blueprint**.
-3. Connect the GitHub repository.
-4. Render detects `render.yaml`.
-5. Enter these secret environment variables when requested:
+1. Upload all files to GitHub.
+2. In Render, connect the repository as a Blueprint or Web Service.
+3. Keep these environment variables:
    - `TELEGRAM_BOT_TOKEN`
    - `TELEGRAM_CHAT_ID`
-   - `APP_PASSWORD` — choose any private password for opening/using the tool.
-6. Deploy.
+   - `APP_PASSWORD`
+4. Render automatically redeploys after a GitHub commit.
 
-You can also create a normal **Web Service** with:
+## Updating an existing installation
 
-- Build command: `pip install -r requirements.txt`
-- Start command: `gunicorn app:app`
-
-## Use
-
-Open the Render URL, enter the same `APP_PASSWORD`, paste a Proton release link, generate, review, and publish.
-
-The app intentionally allows manual corrections because smart-link page structures can change and some stores may not appear until they are active.
-
-## Optional custom domain
-
-After the app works on its `onrender.com` address:
-
-1. Open the service in Render.
-2. Go to **Settings → Custom Domains**.
-3. Add a subdomain such as `release.mjoobi.com`.
-4. Render shows the DNS record to add in Name.com.
-5. Add exactly that record in Name.com's DNS settings.
-
-Test the Render address first; connect the domain afterward.
+Replace the existing repository files with this version and commit the changes. Render should automatically deploy the update. No changes to your Telegram token, channel ID, or password are required.

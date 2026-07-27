@@ -11,45 +11,66 @@
     <section class="card">
       <p class="eyebrow">MJOOBI</p>
       <h1>Telegram Release Publisher</h1>
-      <p class="sub">Paste a Proton release link, review the result, then publish it to your Telegram channel.</p>
+      <p class="sub">Generate from a smart link, or start manually when Proton is unavailable.</p>
 
       <label for="appPassword">App password <span>(only when configured)</span></label>
-      <input id="appPassword" type="password" autocomplete="current-password" placeholder="Optional">
+      <input id="appPassword" type="password" autocomplete="current-password" placeholder="Your private password">
 
-      <label for="releaseUrl">Proton release link</label>
+      <label for="releaseUrl">Proton or smart-link URL</label>
       <div class="inline">
-        <input id="releaseUrl" type="url" placeholder="https://proton.lnk.to/..." required>
+        <input id="releaseUrl" type="url" placeholder="https://proton.lnk.to/...">
         <button id="generateBtn" type="button">Generate</button>
       </div>
+      <button id="manualBtn" class="secondary manual-button" type="button">Start manually</button>
       <p id="status" class="status" aria-live="polite"></p>
     </section>
 
     <section id="editor" class="card hidden">
       <div class="release-grid">
-        <img id="coverPreview" class="cover hidden" alt="Release cover">
+        <div class="cover-panel">
+          <img id="coverPreview" class="cover hidden" alt="Release cover">
+          <div id="coverPlaceholder" class="cover-placeholder">No cover selected</div>
+          <label class="upload-button" for="coverFile">Upload / replace cover</label>
+          <input id="coverFile" class="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp">
+          <button id="removeUploadBtn" class="secondary small hidden" type="button">Remove uploaded cover</button>
+          <p id="coverInfo" class="hint compact">Images are resized and compressed before publishing.</p>
+        </div>
+
         <div>
           <label for="artist">Artist</label>
-          <input id="artist" type="text">
+          <input id="artist" type="text" placeholder="MJoobi, Diata">
 
           <label for="title">Release title</label>
-          <input id="title" type="text">
+          <input id="title" type="text" placeholder="AICHA">
 
           <label for="year">Year</label>
-          <input id="year" type="text" inputmode="numeric">
+          <input id="year" type="text" inputmode="numeric" placeholder="2026">
         </div>
       </div>
 
-      <label for="coverUrl">Cover URL</label>
-      <input id="coverUrl" type="url">
+      <label for="coverUrl">Cover URL <span>(optional when you upload a file)</span></label>
+      <input id="coverUrl" type="url" placeholder="https://.../cover.jpg">
 
-      <label for="finalReleaseUrl">Release URL used for the clickable title</label>
-      <input id="finalReleaseUrl" type="url">
+      <label for="finalReleaseUrl">Main link for the clickable title</label>
+      <input id="finalReleaseUrl" type="url" placeholder="Spotify, Proton, or any preferred release link">
 
       <div class="section-head">
-        <h2>Streaming links</h2>
+        <div>
+          <h2>Streaming links</h2>
+          <p class="hint compact">Use ↑ and ↓ to set the exact order shown in Telegram.</p>
+        </div>
         <button id="addLinkBtn" class="secondary small" type="button">+ Add link</button>
       </div>
       <div id="links"></div>
+
+      <div class="section-head template-head">
+        <div>
+          <h2>Caption layout</h2>
+          <p class="hint compact">Move the placeholders anywhere: <code>{title}</code>, <code>{links}</code>, <code>{artist}</code>, <code>{release}</code>, <code>{year}</code>.</p>
+        </div>
+        <button id="resetTemplateBtn" class="secondary small" type="button">Reset</button>
+      </div>
+      <textarea id="captionTemplate" rows="10" spellcheck="false">{{ default_template }}</textarea>
 
       <div class="actions">
         <button id="previewBtn" class="secondary" type="button">Refresh preview</button>
@@ -60,10 +81,13 @@
     <section id="previewCard" class="card hidden">
       <h2>Preview</h2>
       <div id="telegramPreview" class="telegram-preview"></div>
-      <p class="hint">The title and each platform name are clickable when sent through the Telegram Bot API.</p>
+      <p class="hint">The title and platform names become clickable when the bot publishes the post.</p>
     </section>
   </main>
 
+  <script>
+    window.DEFAULT_CAPTION_TEMPLATE = {{ default_template|tojson }};
+  </script>
   <script src="/static/app.js"></script>
 </body>
 </html>

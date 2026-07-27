@@ -18,7 +18,7 @@ body {
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 .shell {
-  width: min(820px, calc(100% - 28px));
+  width: min(900px, calc(100% - 28px));
   margin: 48px auto;
 }
 .card {
@@ -37,8 +37,15 @@ body {
 }
 h1, h2 { margin-top: 0; }
 h1 { font-size: clamp(28px, 5vw, 42px); margin-bottom: 8px; }
-h2 { font-size: 20px; }
+h2 { font-size: 20px; margin-bottom: 4px; }
 .sub, .hint { color: var(--muted); line-height: 1.55; }
+.compact { margin: 4px 0 0; font-size: 13px; }
+code {
+  color: #e6e6ec;
+  background: #29292e;
+  border-radius: 5px;
+  padding: 2px 5px;
+}
 label {
   display: block;
   margin: 18px 0 7px;
@@ -46,7 +53,7 @@ label {
   font-weight: 700;
 }
 label span { color: var(--muted); font-weight: 400; }
-input {
+input, textarea {
   width: 100%;
   background: #0f0f11;
   border: 1px solid #3b3b41;
@@ -56,9 +63,17 @@ input {
   font: inherit;
   outline: none;
 }
-input:focus { border-color: #888894; box-shadow: 0 0 0 3px rgba(255,255,255,.06); }
+textarea {
+  min-height: 210px;
+  resize: vertical;
+  line-height: 1.55;
+}
+input:focus, textarea:focus {
+  border-color: #888894;
+  box-shadow: 0 0 0 3px rgba(255,255,255,.06);
+}
 .inline { display: grid; grid-template-columns: 1fr auto; gap: 10px; }
-button {
+button, .upload-button {
   border: 0;
   border-radius: 11px;
   padding: 13px 18px;
@@ -67,41 +82,72 @@ button {
   font-weight: 800;
   background: var(--accent);
   color: #111;
+  text-align: center;
 }
-button:hover { filter: brightness(.9); }
+button:hover, .upload-button:hover { filter: brightness(.9); }
 button:disabled { opacity: .55; cursor: wait; }
 .secondary { background: #303035; color: var(--text); }
 .small { padding: 9px 12px; font-size: 13px; }
+.manual-button { margin-top: 10px; width: 100%; }
 .hidden { display: none !important; }
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 .status { min-height: 22px; color: var(--muted); }
 .status.error { color: var(--danger); }
 .status.success { color: var(--success); }
 .release-grid {
   display: grid;
-  grid-template-columns: 220px 1fr;
-  gap: 22px;
+  grid-template-columns: 240px 1fr;
+  gap: 24px;
   align-items: start;
 }
-.cover {
+.cover-panel { min-width: 0; }
+.cover, .cover-placeholder {
   width: 100%;
   aspect-ratio: 1;
-  object-fit: cover;
   border-radius: 14px;
   border: 1px solid var(--line);
 }
+.cover { object-fit: cover; display: block; }
+.cover-placeholder {
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  color: var(--muted);
+  background: #0f0f11;
+  text-align: center;
+}
+.upload-button { display: block; margin: 12px 0 8px; }
 .section-head, .actions {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  margin-top: 24px;
+  margin-top: 26px;
 }
+.template-head { align-items: flex-start; }
 .link-row {
   display: grid;
-  grid-template-columns: 180px 1fr 42px;
+  grid-template-columns: 70px 150px minmax(180px, 1fr) 42px;
   gap: 8px;
   margin: 9px 0;
+  align-items: stretch;
 }
+.reorder-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+.reorder-buttons button { padding: 0; min-height: 44px; }
 .remove-link { padding: 0; background: #342225; color: #ffb4b4; }
 .telegram-preview {
   white-space: pre-line;
@@ -113,11 +159,21 @@ button:disabled { opacity: .55; cursor: wait; }
 .telegram-preview a { color: #6ab7ff; text-decoration: none; }
 .telegram-preview b { font-size: 1.08em; }
 
-@media (max-width: 650px) {
+@media (max-width: 720px) {
   .shell { margin: 18px auto; }
   .card { padding: 18px; }
   .inline, .release-grid { grid-template-columns: 1fr; }
-  .cover { max-width: 280px; }
-  .link-row { grid-template-columns: 115px 1fr 38px; }
+  .cover-panel { max-width: 320px; }
+  .link-row {
+    grid-template-columns: 64px 110px minmax(120px, 1fr) 38px;
+  }
+  .section-head { align-items: stretch; flex-direction: column; }
   .actions { align-items: stretch; flex-direction: column; }
+}
+
+@media (max-width: 500px) {
+  .link-row {
+    grid-template-columns: 64px 1fr 38px;
+  }
+  .platform-url { grid-column: 1 / -1; }
 }
