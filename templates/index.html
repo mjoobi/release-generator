@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MJoobi Telegram Release Publisher</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main class="shell">
+    <section class="card">
+      <p class="eyebrow">MJOOBI</p>
+      <h1>Telegram Release Publisher</h1>
+      <p class="sub">Paste a Proton release link, review the result, then publish it to your Telegram channel.</p>
+
+      <label for="appPassword">App password <span>(only when configured)</span></label>
+      <input id="appPassword" type="password" autocomplete="current-password" placeholder="Optional">
+
+      <label for="releaseUrl">Proton release link</label>
+      <div class="inline">
+        <input id="releaseUrl" type="url" placeholder="https://proton.lnk.to/..." required>
+        <button id="generateBtn" type="button">Generate</button>
+      </div>
+      <p id="status" class="status" aria-live="polite"></p>
+    </section>
+
+    <section id="editor" class="card hidden">
+      <div class="release-grid">
+        <img id="coverPreview" class="cover hidden" alt="Release cover">
+        <div>
+          <label for="artist">Artist</label>
+          <input id="artist" type="text">
+
+          <label for="title">Release title</label>
+          <input id="title" type="text">
+
+          <label for="year">Year</label>
+          <input id="year" type="text" inputmode="numeric">
+        </div>
+      </div>
+
+      <label for="coverUrl">Cover URL</label>
+      <input id="coverUrl" type="url">
+
+      <label for="finalReleaseUrl">Release URL used for the clickable title</label>
+      <input id="finalReleaseUrl" type="url">
+
+      <div class="section-head">
+        <h2>Streaming links</h2>
+        <button id="addLinkBtn" class="secondary small" type="button">+ Add link</button>
+      </div>
+      <div id="links"></div>
+
+      <div class="actions">
+        <button id="previewBtn" class="secondary" type="button">Refresh preview</button>
+        <button id="publishBtn" type="button">Publish to Telegram</button>
+      </div>
+    </section>
+
+    <section id="previewCard" class="card hidden">
+      <h2>Preview</h2>
+      <div id="telegramPreview" class="telegram-preview"></div>
+      <p class="hint">The title and each platform name are clickable when sent through the Telegram Bot API.</p>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
