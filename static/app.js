@@ -71,18 +71,32 @@ function renderCaption(data) {
     ? `<b><a href="${escapeHtml(data.release_url)}">${escapeHtml(displayTitle)}</a></b>`
     : `<b>${escapeHtml(displayTitle)}</b>`;
 
-  const rows = [headline];
-  if (data.year) rows.push(escapeHtml(data.year));
-  rows.push("", "Listen / Buy 👇");
+  const rows = [
+    headline,
+    "",
+    "🔗 <b>Available on</b>",
+    "",
+  ];
 
   const seen = new Set();
+
   data.links.forEach(({ name, url }) => {
     const key = name.toLowerCase();
+
     if (!seen.has(key)) {
       seen.add(key);
-      rows.push(`<a href="${escapeHtml(url)}">${escapeHtml(name)}</a>`);
+      rows.push(
+        `<a href="${escapeHtml(url)}">${escapeHtml(name)}</a>`
+      );
     }
   });
+
+  const copyrightText = data.year
+    ? `© ${escapeHtml(data.year)} Lighthouse Records`
+    : "© Lighthouse Records";
+
+  rows.push("", `<i>${copyrightText}</i>`);
+
   return rows.join("\n");
 }
 
